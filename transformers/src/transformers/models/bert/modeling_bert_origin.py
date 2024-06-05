@@ -15,13 +15,6 @@
 # limitations under the License.
 """PyTorch BERT model."""
 
-# from .custom_softmax import clipped_softmax ##추가함
-from .custom_norm import LayerNorm ##추가함
-from ...custom_activations import ACT2FN #추가함
-from .custom_softmax_fixed import SoftmaxFixedPoint #추가함
-from .custom_configuration_bert import BertConfig #추가함
-
-import torch.cuda.nvtx as nvtx
 import math
 import os
 import warnings
@@ -30,10 +23,15 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
+from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-# from ...activations import ACT2FN
+from ...activations import ACT2FN
+from ...modeling_attn_mask_utils import (
+    _prepare_4d_attention_mask_for_sdpa,
+    _prepare_4d_causal_attention_mask_for_sdpa,
+)
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -52,10 +50,11 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    get_torch_version,
     logging,
     replace_return_docstrings,
 )
-# from .configuration_bert import BertConfig
+from .configuration_bert import BertConfig
 
 
 logger = logging.get_logger(__name__)
@@ -81,33 +80,6 @@ _QA_TARGET_END_INDEX = 15
 _CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "textattack/bert-base-uncased-yelp-polarity"
 _SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
 _SEQ_CLASS_EXPECTED_LOSS = 0.01
-
-
-BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google-bert/bert-base-uncased",
-    "google-bert/bert-large-uncased",
-    "google-bert/bert-base-cased",
-    "google-bert/bert-large-cased",
-    "google-bert/bert-base-multilingual-uncased",
-    "google-bert/bert-base-multilingual-cased",
-    "google-bert/bert-base-chinese",
-    "google-bert/bert-base-german-cased",
-    "google-bert/bert-large-uncased-whole-word-masking",
-    "google-bert/bert-large-cased-whole-word-masking",
-    "google-bert/bert-large-uncased-whole-word-masking-finetuned-squad",
-    "google-bert/bert-large-cased-whole-word-masking-finetuned-squad",
-    "google-bert/bert-base-cased-finetuned-mrpc",
-    "google-bert/bert-base-german-dbmdz-cased",
-    "google-bert/bert-base-german-dbmdz-uncased",
-    "cl-tohoku/bert-base-japanese",
-    "cl-tohoku/bert-base-japanese-whole-word-masking",
-    "cl-tohoku/bert-base-japanese-char",
-    "cl-tohoku/bert-base-japanese-char-whole-word-masking",
-    "TurkuNLP/bert-base-finnish-cased-v1",
-    "TurkuNLP/bert-base-finnish-uncased-v1",
-    "wietsedv/bert-base-dutch-cased",
-    # See all BERT models at https://huggingface.co/models?filter=bert
-]
 
 
 def load_tf_weights_in_bert(model, config, tf_checkpoint_path):
@@ -195,7 +167,6 @@ class BertEmbeddings(nn.Module):
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
@@ -274,7 +245,6 @@ class BertSelfAttention(nn.Module):
             self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
 
         self.is_decoder = config.is_decoder
-        self.softmax_fixed_point = SoftmaxFixedPoint(method=config.softmax_method, frac=8) ###
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -320,19 +290,17 @@ class BertSelfAttention(nn.Module):
 
         use_cache = past_key_value is not None
         if self.is_decoder:
+            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_layer, value_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
-        nvtx.range_push("Q x K^T")
-
-        # Fixed-point 8.8 format
-        query_layer = torch.round(query_layer * (2**8)) / (2**8)
-        query_layer = torch.clip(query_layer, -2**7, 127.99609375)
-        key_layer = torch.round(key_layer * (2**8)) / (2**8)
-        key_layer = torch.clip(key_layer, -2**7, 127.99609375)
-
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-        nvtx.range_pop()
 
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             query_length, key_length = query_layer.shape[2], key_layer.shape[2]
@@ -355,47 +323,24 @@ class BertSelfAttention(nn.Module):
                 relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
                 relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
                 attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
-        
-        nvtx.range_push("scale")
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-        nvtx.range_pop()
 
+        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
 
-        # Fixed-point 8.8 format
-        attention_scores = torch.round(attention_scores * (2**8)) / (2**8)
-        attention_scores = torch.clip(attention_scores, -2**7, 127.99609375)
-
-        nvtx.range_push("softmax")
-        attention_probs = self.softmax_fixed_point.softmax(attention_scores)
-        nvtx.range_pop()
-
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
 
         # Mask heads if we want to
         if head_mask is not None:
             attention_probs = attention_probs * head_mask
 
-        # Fixed-point 8.8 format
-        attention_probs = torch.round(attention_probs * (2**8)) / (2**8)
-        attention_probs = torch.clip(attention_probs, -2**7, 127.99609375)
-        # Fixed-point 8.8 format
-        value_layer = torch.round(value_layer * (2**8)) / (2**8)
-        value_layer = torch.clip(value_layer, -2**7, 127.99609375)
-        
-        
-        nvtx.range_push("attention probs * value")
         context_layer = torch.matmul(attention_probs, value_layer)
-        nvtx.range_pop()
-
-        # Fixed-point 8.8 format
-        context_layer = torch.round(context_layer * (2**8)) / (2**8)
-        context_layer = torch.clip(context_layer, -2**7, 127.99609375)
-        
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
@@ -408,29 +353,133 @@ class BertSelfAttention(nn.Module):
         return outputs
 
 
+class BertSdpaSelfAttention(BertSelfAttention):
+    def __init__(self, config, position_embedding_type=None):
+        super().__init__(config, position_embedding_type=position_embedding_type)
+        self.dropout_prob = config.attention_probs_dropout_prob
+        self.require_contiguous_qkv = version.parse(get_torch_version()) < version.parse("2.2.0")
+
+    # Adapted from BertSelfAttention
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor]:
+        if self.position_embedding_type != "absolute" or output_attentions or head_mask is not None:
+            # TODO: Improve this warning with e.g. `model.config._attn_implementation = "manual"` once implemented.
+            logger.warning_once(
+                "BertSdpaSelfAttention is used but `torch.nn.functional.scaled_dot_product_attention` does not support "
+                "non-absolute `position_embedding_type` or `output_attentions=True` or `head_mask`. Falling back to "
+                "the manual attention implementation, but specifying the manual implementation will be required from "
+                "Transformers version v5.0.0 onwards. This warning can be removed using the argument "
+                '`attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states,
+                attention_mask,
+                head_mask,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                past_key_value,
+                output_attentions,
+            )
+
+        bsz, tgt_len, _ = hidden_states.size()
+
+        query_layer = self.transpose_for_scores(self.query(hidden_states))
+
+        # If this is instantiated as a cross-attention module, the keys and values come from an encoder; the attention
+        # mask needs to be such that the encoder's padding tokens are not attended to.
+        is_cross_attention = encoder_hidden_states is not None
+
+        current_states = encoder_hidden_states if is_cross_attention else hidden_states
+        attention_mask = encoder_attention_mask if is_cross_attention else attention_mask
+
+        # Check `seq_length` of `past_key_value` == `len(current_states)` to support prefix tuning
+        if is_cross_attention and past_key_value and past_key_value[0].shape[2] == current_states.shape[1]:
+            key_layer, value_layer = past_key_value
+        else:
+            key_layer = self.transpose_for_scores(self.key(current_states))
+            value_layer = self.transpose_for_scores(self.value(current_states))
+            if past_key_value is not None and not is_cross_attention:
+                key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
+                value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
+
+        if self.is_decoder:
+            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
+            past_key_value = (key_layer, value_layer)
+
+        # SDPA with memory-efficient backend is broken in torch==2.1.2 when using non-contiguous inputs and a custom
+        # attn_mask, so we need to call `.contiguous()` here. This was fixed in torch==2.2.0.
+        # Reference: https://github.com/pytorch/pytorch/issues/112577
+        if self.require_contiguous_qkv and query_layer.device.type == "cuda" and attention_mask is not None:
+            query_layer = query_layer.contiguous()
+            key_layer = key_layer.contiguous()
+            value_layer = value_layer.contiguous()
+
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        # The tgt_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create
+        # a causal mask in case tgt_len == 1.
+        is_causal = (
+            True if self.is_decoder and not is_cross_attention and attention_mask is None and tgt_len > 1 else False
+        )
+
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_layer,
+            key_layer,
+            value_layer,
+            attn_mask=attention_mask,
+            dropout_p=self.dropout_prob if self.training else 0.0,
+            is_causal=is_causal,
+        )
+
+        attn_output = attn_output.transpose(1, 2)
+        attn_output = attn_output.reshape(bsz, tgt_len, self.all_head_size)
+
+        outputs = (attn_output,)
+        if self.is_decoder:
+            outputs = outputs + (past_key_value,)
+        return outputs
+
+
 class BertSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.LayerNorm = LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        ####self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        #torch.save(hidden_states+input_tensor,'/home/user/HJH/transformer/src/bert-base-cased/mrpc/attention_layernorm_input.pt') ##++++++ hidden_state(=after self-attention) + input_tensor(=before attention) add
-        nvtx.range_push("Layernorm( after_ MHA)")
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
-        nvtx.range_pop()
-        #torch.save(hidden_states,'/home/user/HJH/transformer/src/bert-base-cased/mrpc/attention_layernorm_output.pt') ##++++++ 'self attention + add'  normalizaton
         return hidden_states
+
+
+BERT_SELF_ATTENTION_CLASSES = {
+    "eager": BertSelfAttention,
+    "sdpa": BertSdpaSelfAttention,
+}
 
 
 class BertAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = BertSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = BERT_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = BertSelfOutput(config)
         self.pruned_heads = set()
 
@@ -476,81 +525,32 @@ class BertAttention(nn.Module):
         return outputs
 
 
-class BertIntermediate(nn.Module):##feed forward block
+class BertIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act] #custom gelu
+            self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
-            self.intermediate_act_fn =config.hidden_act
+            self.intermediate_act_fn = config.hidden_act
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        ##8.8format 변환
-        # hidden_states 
-        hidden_states = torch.round(hidden_states * (2**8)) / (2**8)
-        hidden_states = torch.clip(hidden_states, -2**7, 127.99609375)
-        # # weight와 bias 
-        # self.dense.weight.data = torch.round(self.dense.weight.data * (2**8)) / (2**8)
-        # self.dense.weight.data = torch.clip(self.dense.weight.data, -2**7, 127.99609375)
-        # self.dense.bias.data = torch.round(self.dense.bias.data * (2**8)) / (2**8)
-        # self.dense.bias.data = torch.clip(self.dense.bias.data, -2**7, 127.99609375)
-        # ##
-
-        nvtx.range_push("Fc1")
         hidden_states = self.dense(hidden_states)
-        nvtx.range_pop()
-        #torch.save(hidden_states,'/home/user/HJH/transformer/src/bert-base-cased/mrpc/FFN_input.pt') ##++++++ FFN input
-        
-        #result 8.8format
-        hidden_states = torch.round(hidden_states * (2**8))/(2**8)
-        hidden_states = torch.clip(hidden_states, -2**7, 127.99609375)
-
-        nvtx.range_push("activation")
         hidden_states = self.intermediate_act_fn(hidden_states)
-        nvtx.range_pop()
-        #torch.save(hidden_states,'/home/user/HJH/transformer/src/bert-base-cased/mrpc/FFN_output.pt') ##++++++ FFN output
         return hidden_states
 
 
-class BertOutput(nn.Module):## add+layernorm after FFN 
+class BertOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        ##self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        ##8.8format 변환
-        # hidden_states 
-        hidden_states = torch.round(hidden_states * (2**8)) / (2**8)
-        hidden_states = torch.clip(hidden_states, -2**7, 127.99609375)
-        # # weight와 bias 
-        # self.dense.weight.data = torch.round(self.dense.weight.data * (2**8)) / (2**8)
-        # self.dense.weight.data = torch.clip(self.dense.weight.data, -2**7, 127.99609375)
-        # self.dense.bias.data = torch.round(self.dense.bias.data * (2**8)) / (2**8)
-        # self.dense.bias.data = torch.clip(self.dense.bias.data, -2**7, 127.99609375)
-        # ##
-
-
-        nvtx.range_push("Fc2")
         hidden_states = self.dense(hidden_states)
-        nvtx.range_pop()
         hidden_states = self.dropout(hidden_states)
-
-        #result 8.8format
-        hidden_states = torch.round(hidden_states * (2**8))/(2**8)
-        hidden_states = torch.clip(hidden_states, -2**7, 127.99609375)
-
-        #FFNout이랑 add결과 출력하기
-        #torch.save(hidden_states,'/home/user/HJH/transformer/src/bert-clippedSM/10_FFNout(original).pt') 
-        #torch.save(hidden_states+input_tensor,'/home/user/HJH/transformer/src/bert-clippedSM/10_FFN_ADDout(original).pt') 
-        #torch.save(hidden_states+input_tensor,'/home/user/HJH/transformer/src/bert-base-cased/mrpc/FFN_layernorm_input.pt') ##++++++ hidden_state(=after FFN) + input_tensor(=before FFN) add
-        nvtx.range_push("Layernorm (after FFN)")
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
-        nvtx.range_pop()
-        #torch.save(hidden_states,'/home/user/HJH/transformer/src/bert-base-cased/mrpc/FFN_layernorm_output.pt') ##++++++ 'FFN+ add'  normalizaton
         return hidden_states
 
 
@@ -753,9 +753,9 @@ class BertPredictionHeadTransform(nn.Module):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         if isinstance(config.hidden_act, str):
-            self.transform_act_fn = ACT2FN["CustomGELU"] ##### ACT2FN[config.hidden_act]
+            self.transform_act_fn = ACT2FN[config.hidden_act]
         else:
-            self.transform_act_fn = "CustomGELU" #####config.hidden_act
+            self.transform_act_fn = config.hidden_act
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -777,6 +777,9 @@ class BertLMPredictionHead(nn.Module):
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
+        self.decoder.bias = self.bias
+
+    def _tie_weights(self):
         self.decoder.bias = self.bias
 
     def forward(self, hidden_states):
@@ -827,6 +830,7 @@ class BertPreTrainedModel(PreTrainedModel):
     load_tf_weights = load_tf_weights_in_bert
     base_model_prefix = "bert"
     supports_gradient_checkpointing = True
+    _supports_sdpa = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -962,6 +966,8 @@ class BertModel(BertPreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
+    _no_split_modules = ["BertEmbeddings", "BertLayer"]
+
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -970,6 +976,9 @@ class BertModel(BertPreTrainedModel):
         self.encoder = BertEncoder(config)
 
         self.pooler = BertPooler(config) if add_pooling_layer else None
+
+        self.attn_implementation = config._attn_implementation
+        self.position_embedding_type = config.position_embedding_type
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1057,9 +1066,6 @@ class BertModel(BertPreTrainedModel):
         # past_key_values_length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
-        if attention_mask is None:
-            attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
-
         if token_type_ids is None:
             if hasattr(self.embeddings, "token_type_ids"):
                 buffered_token_type_ids = self.embeddings.token_type_ids[:, :seq_length]
@@ -1068,9 +1074,43 @@ class BertModel(BertPreTrainedModel):
             else:
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
+        embedding_output = self.embeddings(
+            input_ids=input_ids,
+            position_ids=position_ids,
+            token_type_ids=token_type_ids,
+            inputs_embeds=inputs_embeds,
+            past_key_values_length=past_key_values_length,
+        )
+
+        if attention_mask is None:
+            attention_mask = torch.ones((batch_size, seq_length + past_key_values_length), device=device)
+
+        use_sdpa_attention_masks = (
+            self.attn_implementation == "sdpa"
+            and self.position_embedding_type == "absolute"
+            and head_mask is None
+            and not output_attentions
+        )
+
+        # Expand the attention mask
+        if use_sdpa_attention_masks:
+            # Expand the attention mask for SDPA.
+            # [bsz, seq_len] -> [bsz, 1, seq_len, seq_len]
+            if self.config.is_decoder:
+                extended_attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
+                    attention_mask,
+                    input_shape,
+                    embedding_output,
+                    past_key_values_length,
+                )
+            else:
+                extended_attention_mask = _prepare_4d_attention_mask_for_sdpa(
+                    attention_mask, embedding_output.dtype, tgt_len=seq_length
+                )
+        else:
+            # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
+            # ourselves in which case we just need to make it broadcastable to all heads.
+            extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
@@ -1079,7 +1119,15 @@ class BertModel(BertPreTrainedModel):
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
             if encoder_attention_mask is None:
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+
+            if use_sdpa_attention_masks:
+                # Expand the attention mask for SDPA.
+                # [bsz, seq_len] -> [bsz, 1, seq_len, seq_len]
+                encoder_extended_attention_mask = _prepare_4d_attention_mask_for_sdpa(
+                    encoder_attention_mask, embedding_output.dtype, tgt_len=seq_length
+                )
+            else:
+                encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             encoder_extended_attention_mask = None
 
@@ -1090,13 +1138,6 @@ class BertModel(BertPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        embedding_output = self.embeddings(
-            input_ids=input_ids,
-            position_ids=position_ids,
-            token_type_ids=token_type_ids,
-            inputs_embeds=inputs_embeds,
-            past_key_values_length=past_key_values_length,
-        )
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
@@ -1149,6 +1190,7 @@ class BertForPreTraining(BertPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=BertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
@@ -1239,7 +1281,7 @@ class BertForPreTraining(BertPreTrainedModel):
     """Bert Model with a `language modeling` head on top for CLM fine-tuning.""", BERT_START_DOCSTRING
 )
 class BertLMHeadModel(BertPreTrainedModel):
-    _tied_weights_keys = ["predictions.decoder.bias", "cls.predictions.decoder.weight"]
+    _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1258,6 +1300,7 @@ class BertLMHeadModel(BertPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1411,6 +1454,7 @@ class BertForMaskedLM(BertPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1647,7 +1691,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        
+
         outputs = self.bert(
             input_ids,
             attention_mask=attention_mask,
