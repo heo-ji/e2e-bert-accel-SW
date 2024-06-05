@@ -1,4 +1,4 @@
-# 수정된 코드 부분
+# ahnjh's code
 
 import struct
 import csv

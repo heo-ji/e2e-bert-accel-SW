@@ -10,6 +10,7 @@ def layernorm_sram(sequence_length,data):
     return kb
 
 def ffn_sram(sequence_length,data):
+    # systolic array 로 tiling해서 처리함
     input_and_f2out = 768*sequence_length*data
     bias1 = 768*data
     weight1 =  4*768*768*data

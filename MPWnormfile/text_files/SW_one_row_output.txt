@@ -1,0 +1,6 @@
+acc(18.8) = 3FFCF4E
+acc2(26.8) = 000004EC45
+mean(8.8) = FFEF
+mean2(16.16) = 0001A25C
+var(8.16) = 01A13B
+invsqrt(8.8) = 00C7

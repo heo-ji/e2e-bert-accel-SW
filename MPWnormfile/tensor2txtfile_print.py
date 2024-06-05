@@ -1,3 +1,9 @@
+"""
+파일 경로 수정 필요함
+./tensor_files/
+./text_files/
+
+"""
 import pdb
 import numpy as np
 import torch
