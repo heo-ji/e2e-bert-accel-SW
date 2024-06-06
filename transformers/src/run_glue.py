@@ -23,13 +23,14 @@
 # You can also adapt this script on your own text classification task. Pointers for this are left as comments.
 
 import logging
-import os       #추가함
+import os       
 import time     #추가함
 
 #추가함
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"        
 os.environ['CUDA_VISIBLE_DEVICES']="0"
 
+os.environ["WANDB_DISABLED"] = "true"
 os.environ[ "CUDA_LAUNCH_BLOCKING" ] = "1"
 os.environ['TORCH_USE_CUDA_DSA'] = "1"
 
