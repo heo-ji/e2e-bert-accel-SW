@@ -185,6 +185,14 @@ class ModelArguments:
         default=False,
         metadata={"help": "Will enable to load a pretrained model whose head dimensions are different."},
     )
+    ###추가함
+    layernorm_method: Optional[str] = field(
+        default="original", metadata={"help": " layernorm method to use: 'original' or 'custom_invsqrt_norm' or 'dualpath_norm' "}
+    )
+    ###추가함
+    softmax_method: Optional[str] = field(
+        default="original", metadata={"help": "Softmax method to use: 'cordic'(do not use), or 'base2' or 'original' "}
+    )
 
 
 def main():
@@ -320,6 +328,9 @@ def main():
         token=model_args.token,
         trust_remote_code=model_args.trust_remote_code,
     )
+    config.softmax_method = model_args.softmax_method   ###추가함
+    config.layernorm_method = model_args.layernorm_method   ###추가함
+    
     model = AutoModelForImageClassification.from_pretrained(
         model_args.model_name_or_path,
         from_tf=bool(".ckpt" in model_args.model_name_or_path),

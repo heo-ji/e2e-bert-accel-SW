@@ -178,8 +178,8 @@ class BertConfig(PretrainedConfig):
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
-        self.softmax_method = softmax_method
-        self.layernorm_method = layernorm_method
+        self.softmax_method = softmax_method  ###추가함
+        self.layernorm_method = layernorm_method  ###추가함
 
 class BertOnnxConfig(OnnxConfig):
     @property

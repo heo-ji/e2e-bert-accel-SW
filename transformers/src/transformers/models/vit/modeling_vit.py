@@ -14,6 +14,10 @@
 # limitations under the License.
 """PyTorch ViT model."""
 
+from .custom_configuration_vit import ViTConfig #추가함
+from .custom_norm import Custom_LayerNorm ##추가함
+from .custom_softmax import Custom_softmax #추가함
+
 import collections.abc
 import math
 from typing import Dict, List, Optional, Set, Tuple, Union
@@ -39,7 +43,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_vit import ViTConfig
+#from .configuration_vit import ViTConfig
 
 
 logger = logging.get_logger(__name__)
@@ -193,6 +197,7 @@ class ViTSelfAttention(nn.Module):
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.custom_softmax = Custom_softmax(method=config.softmax_method, frac=8) ###추가함
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -214,7 +219,8 @@ class ViTSelfAttention(nn.Module):
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
 
         # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
+        attention_probs =  self.custom_softmax.softmax(attention_scores)
+        #attention_probs = nn.functional.softmax(attention_scores, dim=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -376,8 +382,10 @@ class ViTLayer(nn.Module):
         self.attention = VIT_ATTENTION_CLASSES[config._attn_implementation](config)
         self.intermediate = ViTIntermediate(config)
         self.output = ViTOutput(config)
-        self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layernorm_before = Custom_LayerNorm(config.hidden_size, eps=config.layer_norm_eps, method=config.layernorm_method )
+        self.layernorm_after =  Custom_LayerNorm(config.hidden_size, eps=config.layer_norm_eps, method=config.layernorm_method )
+        #self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        #self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
