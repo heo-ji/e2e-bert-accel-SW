@@ -375,7 +375,7 @@ VIT_ATTENTION_CLASSES = {
 class ViTLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
-    def __init__(self, config: ViTConfig) -> None:
+    def __init__(self, config: ViTConfig, layer_id) -> None:
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
@@ -386,6 +386,7 @@ class ViTLayer(nn.Module):
         self.layernorm_after =  Custom_LayerNorm(config.hidden_size, eps=config.layer_norm_eps, method=config.layernorm_method )
         #self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         #self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layer_id = layer_id
 
     def forward(
         self,
@@ -393,6 +394,10 @@ class ViTLayer(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+        if not self.training:
+            file_name_before = f"layer{self.layer_id}_first_layernorm_input.pt"
+            torch.save(hidden_states, f"/home/user/HJH/2024_nonlinear/transformers/src/transformers/models/vit/vit_input_range/{file_name_before}")
+
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in ViT, layernorm is applied before self-attention
             head_mask,
@@ -403,6 +408,10 @@ class ViTLayer(nn.Module):
 
         # first residual connection
         hidden_states = attention_output + hidden_states
+
+        if not self.training:
+            file_name_after = f"layer{self.layer_id}_second_layernorm_output.pt"
+            torch.save(hidden_states.cpu(), f"/home/user/HJH/2024_nonlinear/transformers/src/transformers/models/vit/vit_input_range/{file_name_after}")
 
         # in ViT, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
@@ -420,7 +429,7 @@ class ViTEncoder(nn.Module):
     def __init__(self, config: ViTConfig) -> None:
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([ViTLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([ViTLayer(config,layer_id=i) for i in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -435,6 +444,7 @@ class ViTEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
 
         for i, layer_module in enumerate(self.layer):
+
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 

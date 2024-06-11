@@ -1,5 +1,5 @@
 #finetuned model
-python run_image_classification.py \
+python3 run_image_classification.py \
     --model_name_or_path nateraw/vit-base-patch16-224-cifar10 \
     --dataset_name cifar10 \
     --output_dir /home/user/HJH/results_vit_base/cifar10 \
@@ -14,4 +14,5 @@ python run_image_classification.py \
     --save_strategy epoch \
     --load_best_model_at_end True \
     --save_total_limit 3 \
-    --seed 1337
+    --seed 1337 \
+    --layernorm_method original #dualpath_norm

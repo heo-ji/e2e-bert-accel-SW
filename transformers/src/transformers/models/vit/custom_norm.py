@@ -374,8 +374,7 @@ class Custom_LayerNorm(Module):
         #추가함
         self.invsqrt = custom_invsqrt() 
         self.method = method
-        self.D_s = 384  # example value for the number of significant dimensions
-        self.N_t = 8  # sampling rate for trivial dimensions
+
 
     def reset_parameters(self) -> None:
         if self.elementwise_affine:
@@ -519,6 +518,8 @@ class Custom_LayerNorm(Module):
         return out
 
     def forward_dual_path(self, input: Tensor) -> Tensor:
+        self.D_s = 384  # example value for the number of significant dimensions
+        self.N_t = 5  # sampling rate for trivial dimensions
         # scale_factor_8 = 2**8
         # scale_factor_10 = 2**10
         # scale_factor_16 = 2**16
