@@ -396,7 +396,7 @@ class ViTLayer(nn.Module):
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         if not self.training:
             file_name_before = f"layer{self.layer_id}_first_layernorm_input.pt"
-            torch.save(hidden_states, f"/home/user/HJH/2024_nonlinear/transformers/src/transformers/models/vit/vit_input_range/{file_name_before}")
+            torch.save(hidden_states, f"/home/user/HJH/2024_nonlinear/transformers/src/transformers/models/vit/vit_input_range/tensor/patch16-224-cifar10/{file_name_before}")
 
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in ViT, layernorm is applied before self-attention
@@ -411,7 +411,7 @@ class ViTLayer(nn.Module):
 
         if not self.training:
             file_name_after = f"layer{self.layer_id}_second_layernorm_output.pt"
-            torch.save(hidden_states.cpu(), f"/home/user/HJH/2024_nonlinear/transformers/src/transformers/models/vit/vit_input_range/{file_name_after}")
+            torch.save(hidden_states.cpu(), f"/home/user/HJH/2024_nonlinear/transformers/src/transformers/models/vit/vit_input_range/tensor/patch16-224-cifar10/{file_name_after}")
 
         # in ViT, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)

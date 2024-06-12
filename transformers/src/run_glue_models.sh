@@ -43,6 +43,7 @@ done
 #   --overwrite_output_dir \
 #   --softmax_method original  \
 #     --hidden_act gelu
+# --max_seq_length 12800
 
 
 #     softmax_method: 'base2' , 'original'

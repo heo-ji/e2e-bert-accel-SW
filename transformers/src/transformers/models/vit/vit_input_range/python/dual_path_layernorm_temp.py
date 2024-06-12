@@ -121,6 +121,8 @@ def quick_select_top_k(input_tensor, k):
     
     return torch.tensor(top_k_elements)
 
+
+
 def state_run(FIFO_L, FIFO_R, pivot, num_eq_pivot):
     for item in FIFO_L:
         if item < pivot:
