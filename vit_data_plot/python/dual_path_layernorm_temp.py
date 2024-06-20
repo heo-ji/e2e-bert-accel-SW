@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # 디렉토리 설정
-input_dir = "/home/user/HJH/2024_nonlinear/transformers/src/transformers/models/vit/vit_input_range"
+input_dir = "/home/user/HJH/2024_git_nonlinear/vit_data_plot"
 files = sorted(os.listdir(input_dir))
 
 

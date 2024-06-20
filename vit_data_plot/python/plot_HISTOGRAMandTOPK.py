@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import torch
 
 # 디렉토리 설정
-common_dir = "/home/user/HJH/2024_nonlinear/transformers/src/transformers/models/vit/vit_input_range"
+common_dir = "/home/user/HJH/2024_git_nonlinear/vit_data_plot"
 # data
 data_name = "patch16-224-cifar10"
 
