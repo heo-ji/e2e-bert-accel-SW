@@ -33,9 +33,9 @@
 # done
 
 
-#!!!!!!!!!!!!!!!!!!!!!!! 수정필요 : modeling bert python파일에서 round, cliping !#
 
-echo "############ original -> mrpc ############"
+
+echo "############ original -> mrpc (8.8)############"
 python3 run_glue.py \
   --model_name_or_path ModelTC/bert-base-uncased-mrpc \
   --task_name mrpc  \
@@ -47,7 +47,7 @@ python3 run_glue.py \
     --hidden_act gelu \
     --layernorm_method original
 
-echo "############ custom_GELU , base2softmax , custom_invsqrt_norm -> mrpc ############"
+echo "############ custom_GELU , base2softmax , custom_invsqrt_norm -> mrpc (8.8) ############"
 python3 run_glue.py \
   --model_name_or_path ModelTC/bert-base-uncased-mrpc \
   --task_name mrpc  \
