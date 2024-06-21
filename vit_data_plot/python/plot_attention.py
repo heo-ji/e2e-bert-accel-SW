@@ -69,7 +69,6 @@ def plot_attention_matrices(files, input_dir, device, output_dir):
 
 
 #확인
-
 plot_attention_matrices(qk_files, qk_input_dir, device, qk_output_dir)
 plot_attention_matrices(softmax_files, softmax_input_dir, device, softmax_output_dir)
 
