@@ -12,7 +12,7 @@ import torch
 # 디렉토리 설정
 common_dir = "/home/user/HJH/2024_git_nonlinear/vit_data_plot"
 # data
-data_name = "patch16-224-cifar10"
+data_name = "patch16-224-cifar10/layernorm_data"
 
 input_dir = os.path.join(common_dir, f"./tensor/{data_name}")
 files = sorted(os.listdir(input_dir))

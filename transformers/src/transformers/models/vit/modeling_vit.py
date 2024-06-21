@@ -216,11 +216,9 @@ class ViTSelfAttention(nn.Module):
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-
-        ###추가함
-        if not self.training:
-            file_name_attention_map = f"layer{self.layer_id}_attention_score.pt"
-            torch.save(attention_scores, f"/home/user/HJH/2024_git_nonlinear/vit_data_plot/tensor/patch16-224-cifar10/attention_score_data/{file_name_attention_map}")
+ 
+        #file_name_attention_map = f"layer{self.layer_id}_attention_score.pt" ###추가함
+        #torch.save(attention_scores, f"/home/user/HJH/2024_git_nonlinear/vit_data_plot/tensor/patch16-224-cifar10/attention_score_data/{file_name_attention_map}") ###추가함
         
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
 
@@ -228,9 +226,9 @@ class ViTSelfAttention(nn.Module):
         attention_probs =  self.custom_softmax.softmax(attention_scores)
         #attention_probs = nn.functional.softmax(attention_scores, dim=-1)
 
-        if not self.training:
-            file_name_attention_prob = f"layer{self.layer_id}_attention_probs.pt"
-            torch.save(attention_probs, f"/home/user/HJH/2024_git_nonlinear/vit_data_plot/tensor/patch16-224-cifar10//attention_probs_data/{file_name_attention_prob}")
+        
+        #file_name_attention_prob = f"layer{self.layer_id}_attention_probs.pt" ###추가함
+        #torch.save(attention_probs, f"/home/user/HJH/2024_git_nonlinear/vit_data_plot/tensor/patch16-224-cifar10//attention_probs_data/{file_name_attention_prob}") ###추가함
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -252,8 +250,8 @@ class ViTSelfAttention(nn.Module):
 
 
 class ViTSdpaSelfAttention(ViTSelfAttention):
-    def __init__(self, config: ViTConfig) -> None:
-        super().__init__(config)
+    def __init__(self, config: ViTConfig, layer_id) -> None: ###추가함 layer_id
+        super().__init__(config, layer_id)
         self.attention_probs_dropout_prob = config.attention_probs_dropout_prob
 
     def forward(
@@ -265,19 +263,52 @@ class ViTSdpaSelfAttention(ViTSelfAttention):
         value_layer = self.transpose_for_scores(self.value(hidden_states))
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
-        context_layer = torch.nn.functional.scaled_dot_product_attention(
-            query_layer,
-            key_layer,
-            value_layer,
-            head_mask,
-            self.attention_probs_dropout_prob if self.training else 0.0,
-            is_causal=False,
-            scale=None,
-        )
+        # context_layer = torch.nn.functional.scaled_dot_product_attention(
+        #     query_layer,
+        #     key_layer,
+        #     value_layer,
+        #     head_mask,
+        #     self.attention_probs_dropout_prob if self.training else 0.0,
+        #     is_causal=False,
+        #     scale=None,
+        # )
+        
+        ###추가함
+        #Q*K^T
+        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2)) # -1: 마지막텐서 -2:뒤에서 두번째 텐서 = 뒤에 두차원 바꿔서 transpose
 
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(new_context_layer_shape)
+        file_name_attention_map = f"layer{self.layer_id}_attention_score.pt"
+        torch.save(attention_scores, f"/home/user/HJH/2024_git_nonlinear/vit_data_plot/tensor/patch16-224-cifar10/attention_score_data/{file_name_attention_map}")
+
+        #scale
+        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        
+        #softmax
+        attention_probs =  self.custom_softmax.softmax(attention_scores)
+
+        #drop out
+        if self.training:
+            attention_probs = nn.functional.dropout(attention_probs, p=self.attention_probs_dropout_prob, training=True)
+
+        
+        file_name_attention_prob = f"layer{self.layer_id}_attention_probs.pt"
+        torch.save(attention_probs, f"/home/user/HJH/2024_git_nonlinear/vit_data_plot/tensor/patch16-224-cifar10/attention_probs_data/{file_name_attention_prob}")
+
+        
+        if head_mask is not None:
+            attention_probs = attention_probs * head_mask
+
+        # softmax * V
+        context_layer = torch.matmul(attention_probs, value_layer)
+
+        file_name_attention_out = f"layer{self.layer_id}_attention_out.pt"
+        torch.save(context_layer, f"/home/user/HJH/2024_git_nonlinear/vit_data_plot/tensor/patch16-224-cifar10/attention_out_data/{file_name_attention_out}")
+
+
+
+        context_layer = context_layer.permute(0, 2, 1, 3).contiguous() #위에서는 [batch_size, num_heads, sequence_length, head_size]였어서, [batch_size, sequence_length, num_heads, head_size]로 변경
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,) #context_layer.size()[:-2]는 텐서의 앞 두 차원(즉, batch_size와 sequence_length)을 유지하고, self.all_head_size,)는 num_heads * head_size 값을 의미
+        context_layer = context_layer.view(new_context_layer_shape) #최종 텐서는 [batch_size, sequence_length, d_model] 형태
 
         return context_layer, None
 
@@ -340,9 +371,9 @@ class ViTAttention(nn.Module):
 
 
 class ViTSdpaAttention(ViTAttention):
-    def __init__(self, config: ViTConfig) -> None:
-        super().__init__(config)
-        self.attention = ViTSdpaSelfAttention(config)
+    def __init__(self, config: ViTConfig, layer_id) -> None: ###추가함
+        super().__init__(config, layer_id)
+        self.attention = ViTSdpaSelfAttention(config, layer_id)
 
 
 class ViTIntermediate(nn.Module):
@@ -404,10 +435,9 @@ class ViTLayer(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        ###추가함
-        # if not self.training:
-        #     file_name_before = f"layer{self.layer_id}_first_layernorm_input.pt"
-        #     torch.save(hidden_states, f"/home/user/HJH/2024_git_nonlinear/vit_data_plot/tensor/patch16-224-cifar10/layernorm_data/{file_name_before}")
+        ###추가함 if not self.training:
+        #file_name_before = f"layer{self.layer_id}_first_layernorm_input.pt"
+        #torch.save(hidden_states, f"/home/user/HJH/2024_git_nonlinear/vit_data_plot/tensor/patch16-224-cifar10/layernorm_data/{file_name_before}")
 
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in ViT, layernorm is applied before self-attention
@@ -420,10 +450,9 @@ class ViTLayer(nn.Module):
         # first residual connection
         hidden_states = attention_output + hidden_states
 
-        ###추가함
-        # if not self.training:
-        #     file_name_after = f"layer{self.layer_id}_second_layernorm_output.pt"
-        #     torch.save(hidden_states.cpu(), f"/home/user/HJH/2024_git_nonlinear/vit_data_plot/tensor/patch16-224-cifar10/layernorm_data/{file_name_after}")
+        ###추가함 if not self.training:
+        #file_name_after = f"layer{self.layer_id}_second_layernorm_output.pt"
+        #torch.save(hidden_states.cpu(), f"/home/user/HJH/2024_git_nonlinear/vit_data_plot/tensor/patch16-224-cifar10/layernorm_data/{file_name_after}")
 
         # in ViT, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
