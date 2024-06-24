@@ -36,10 +36,10 @@
 - **run_glue_models.sh** , run_glue_optional.sh : 여러번 run_glue하기 위함  
 
 ### ViT (*일단 지금은 fp32 , original operation*)
-- **custom_norm.py** : BERT 동일, *일단 지금은 'original'만 사용*
-- **custom_invsqrt.py** :BERT 동일, *일단 지금은 self.register_buffer로 그냥 BERT용으로 만들었던 32개 LUT값 이용함*
-- **custom_softmax_fixed.py** : BERT 동일, *일단 지금은 'original'만 사용*
-- **custom_configuration_vit.py** : BERT 동일, ViTconfig에 softmax_method, layernorm_meth
+- **custom_norm.py** : 위 BERT내용과 동일, *일단 지금은 'original'만 사용*
+- **custom_invsqrt.py** :위 BERT내용과 동일, *일단 지금은 self.register_buffer로 그냥 BERT용으로 만들었던 32개 LUT값 이용함*
+- **custom_softmax_fixed.py** : 위 BERT내용과 동일, *일단 지금은 'original'만 사용*
+- **custom_configuration_vit.py** : 위 BERT내용과 동일, ViTconfig에 softmax_method, layernorm_meth
 
 - **modeling_vit.py**
   + *일단 지금은 fp32*
@@ -47,7 +47,7 @@
   + torch.save로 tensor값 저장
   + class ViTSdpaSelfAttention 수정 : torch.nn.functional.scaled_dot_product_attention으로 연산하는것 대신 class ViTSelfAttention처럼 작성 (중간 attention값을 torch.save하기위해)
 
-- **run_image_classification.py** : BERT와 동일
+- **run_image_classification.py** : 위 BERT내용과 동일
 - **run_image_classification_models.sh** : run_image_classification.py 실행할때 argument 수정하기 편하려고 만듦
 
 ---
