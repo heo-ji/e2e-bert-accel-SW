@@ -35,6 +35,23 @@
 - **run_glue.py** : argument로 layernorm,gelu,softmax method 받아서 config로 설정
 - **run_glue_models.sh** , run_glue_optional.sh : 여러번 run_glue하기 위함  
 
+<details>
+<summary> BERT accuracy</summary>
+<div>
+  data = mrpc 
+  
+1. original : full-precision  
+eval_accuracy           =     0.8775
+
+2. original with fixed-point 8.8  
+eval_accuracy           =     0.8725
+
+2. custom_GELU , base2softmax , custom_invsqrt_norm  WITH fixed-point 8.8  
+eval_accuracy           =      0.875
+
+</div>
+</details>
+
 ### ViT (*일단 지금은 fp32 , original operation*)
 - **custom_norm.py** : 위 BERT내용과 동일, *일단 지금은 'original'만 사용*
 - **custom_invsqrt.py** :위 BERT내용과 동일, *일단 지금은 self.register_buffer로 그냥 BERT용으로 만들었던 32개 LUT값 이용함*
