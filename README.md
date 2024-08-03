@@ -7,6 +7,7 @@
   - **📁text_files** :  8.8 fixed point format의 tensor데이터 (.txt형태)
   - **csv2hex_print.py** : 분산의 inverse_square_root LUT 값이 csv파일이여서 이걸  0xFFFF 형태로 변환
   - **tensor2txtfile_print.py** : tensor_files -> text_files 값으로 변경
+  - invsqrt_w_LUT.py : inverse square root(variance)에서 사용된 LUT에 맞는 분산값 확인하려고..(아예 랜덤값을 넣으면 분산이 LUT와 맞지않아서 동작을 하지 않기때문)
     
 ## 📌 vert_data_plot
   modeling_vit.py에서 저장한 tensor 데이터 시각화
