@@ -10,6 +10,7 @@ from torch import Tensor, Size
 from typing import Union, List, Tuple
 
 import pandas as pd
+import os
 
 
 #input value is 26bit(16.10)
@@ -128,9 +129,14 @@ class custom_invsqrt(Module):
         # t = self.t
         
         #"""
-        d = pd.read_csv('/home/user/HJH/2024_git_nonlinear/transformers/src/transformers/models/bert/invsqrt_csv_file/inv_SQRT_d.csv')
-        s = pd.read_csv('/home/user/HJH/2024_git_nonlinear/transformers/src/transformers/models/bert/invsqrt_csv_file/inv_SQRT_s.csv')
-        t = pd.read_csv('/home/user/HJH/2024_git_nonlinear/transformers/src/transformers/models/bert/invsqrt_csv_file/inv_SQRT_t.csv')
+        base_path = os.path.dirname(__file__)  # 현재 .py 파일이 있는 위치
+        d_csv_path = os.path.join(base_path, "invsqrt_csv_file/inv_SQRT_d.csv")
+        s_csv_path = os.path.join(base_path, "invsqrt_csv_file/inv_SQRT_s.csv")
+        t_csv_path = os.path.join(base_path, "invsqrt_csv_file/inv_SQRT_t.csv")
+
+        d = pd.read_csv(d_csv_path)
+        s = pd.read_csv(s_csv_path)
+        t = pd.read_csv(t_csv_path)
         
         d = torch.tensor(d.values, dtype=torch.float32)
         s = torch.tensor(s.values, dtype=torch.float32)
