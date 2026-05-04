@@ -27,7 +27,7 @@
 - **custom_configuration_bert.py** : BERTconfig에 softmax_method, layernorm_method 추가함
 - **custom_activations.py** :  NNLUT로 만든, LUT16개 이용한 "CustomGELU" 추가
 - **modeling_bert.py**
-  + Activation & weight & bias 모두 fixed point 8.8로 변경 = torch.round , torch.clip 이용
+  + Activation & weight & bias 모두 fixed point 8.8로 변경 = ~~torch.round~~ torch.floor , torch.clip 이용
   + Import Custom_\*\*\*
   + (현재는 주석처리) NVIDIA Tools for Profiling Code in Python [참고](https://developer.nvidia.com/ko-kr/blog/nvidia-tools-extension-api-python-%eb%b0%8f-c-c%ec%97%90%ec%84%9c-%ec%bd%94%eb%93%9c%eb%a5%bc-%ed%94%84%eb%a1%9c%ed%8c%8c%ec%9d%bc%eb%a7%81%ed%95%98%ea%b8%b0-%ec%9c%84%ed%95%9c-%ec%a3%bc%ec%84%9d/)  
      import torch.cuda.nvtx as nvtx, nvtx.range_push("이름") , nvtx.range_pop()
