@@ -88,3 +88,16 @@ transformers
 2. NNLUT : https://arxiv.org/abs/2112.02191
 
 
+
+
+# 최종 sw 수정
+1. magic num 수정
+: torch.clip(input_fx16, -2**7, 127.99609375) 에서
+127.99609375-> (2**7 - 1/scale_factor_8) 형태로 수정
+
+2. modeling_bert.py, custom_softmax_fixed.py 에서 
+torch.round ->torch.floor로 수정
+: HW에서 하위비트 버림 = torch.floor 이기때문
+
+- [ ]  수정한 SW glue task 정확도 확인 필요
+- [ ]  #[try]# 지우고 돌려보기 정수부 clip 한것임. 없어도 상관없는거 같긴함.
