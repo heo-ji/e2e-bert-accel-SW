@@ -147,16 +147,16 @@ class custom_invsqrt(Module):
         scale_factor_8 = 2**8
         
         d = torch.floor(d * scale_factor_16)/scale_factor_16 #소수부16
-        # d = torch.clip(d, -2**15, 2**15- 1) #정수부16
-        d = torch.clip(d, -2**7, 127.99998474121094) #정수부8
-        
+        # d = torch.clip(d, -2**15, 2**15- 1/scale_factor_16) #정수부16
+        d = torch.clip(d, -2**7, 2**7 - 1/scale_factor_16) #정수부8
+
         # s = torch.floor(s * scale_factor_16)/scale_factor_16 #소수부16
-        # s = torch.clip(s, -2**15, 2**15- 1) #정수부16
+        # s = torch.clip(s, -2**15, 2**15- 1/scale_factor_16) #정수부16.소수부16
         s = torch.floor(s * scale_factor_8)/scale_factor_8 #소수부8
-        s = torch.clip(s, -2**7, 127.99609375) #정수부8
-        
+        s = torch.clip(s, -2**7, 2**7 - 1/scale_factor_8) #정수부8
+
         t = torch.floor(t * scale_factor_8)/scale_factor_8 #소수부8
-        t = torch.clip(t, -2**7, 127.99609375) #정수부8
+        t = torch.clip(t, -2**7, 2**7 - 1/scale_factor_8) #정수부8
 
         #""" 
         d=d.squeeze()
@@ -186,7 +186,7 @@ class custom_invsqrt(Module):
         scale_factor_8 = 2**8
         
         s_multiply_x = torch.floor(s_multiply_x * scale_factor_8)/scale_factor_8 #소수부8
-        s_multiply_x = torch.clip(s_multiply_x, -2**7,  127.99609375) #정수부8
+        s_multiply_x = torch.clip(s_multiply_x, -2**7, 2**7 - 1/scale_factor_8) #정수부8.소수부8
         
         
         result =  s_multiply_x + self.t[idx_clamped] ## (8.8)+8.8

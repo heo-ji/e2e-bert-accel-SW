@@ -32,9 +32,10 @@ class SoftmaxFixedPoint:
 
     
     def custom_log2e(self, x) :
+        scale_factor_8 = 2**8
         #8.8
-        input = torch.round(x * 256)/256
-        input = torch.clip(input, -2**7, 127.99609375)
+        input = torch.floor(x * scale_factor_8)/scale_factor_8
+        input = torch.clip(input, -2**7, 2**7 - 1/scale_factor_8)
 
         
 
@@ -47,8 +48,8 @@ class SoftmaxFixedPoint:
         out = log2e_x / sum_log2e_x
 
         #8.8
-        out = torch.round(out * 256)/256
-        out = torch.clip(out, -2**7, 127.99609375)
+        out = torch.floor(out * scale_factor_8)/scale_factor_8
+        out = torch.clip(out, -2**7, 2**7 - 1/scale_factor_8)
         
         return out
     

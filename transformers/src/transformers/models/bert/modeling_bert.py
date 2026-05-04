@@ -291,6 +291,7 @@ class BertSelfAttention(nn.Module):
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
+        scale_factor_8 = 2**8
         mixed_query_layer = self.query(hidden_states)
 
         # If this is instantiated as a cross-attention module, the keys
@@ -326,10 +327,10 @@ class BertSelfAttention(nn.Module):
         ##nvtx.range_push("Q x K^T")
 
         # Fixed-point 8.8 format
-        query_layer = torch.round(query_layer * (2**8)) / (2**8)
-        query_layer = torch.clip(query_layer, -2**7, 127.99609375)
-        key_layer = torch.round(key_layer * (2**8)) / (2**8)
-        key_layer = torch.clip(key_layer, -2**7, 127.99609375)
+        query_layer = torch.floor(query_layer * scale_factor_8)/scale_factor_8
+        query_layer = torch.clip(query_layer, -2**7, 2**7 - 1/scale_factor_8)
+        key_layer = torch.floor(key_layer * scale_factor_8)/scale_factor_8
+        key_layer = torch.clip(key_layer, -2**7, 2**7 - 1/scale_factor_8)
 
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
         ##nvtx.range_pop()
@@ -367,8 +368,8 @@ class BertSelfAttention(nn.Module):
         # Normalize the attention scores to probabilities.
 
         # Fixed-point 8.8 format
-        attention_scores = torch.round(attention_scores * (2**8)) / (2**8)
-        attention_scores = torch.clip(attention_scores, -2**7, 127.99609375)
+        attention_scores = torch.floor(attention_scores * scale_factor_8)/scale_factor_8
+        attention_scores = torch.clip(attention_scores, -2**7, 2**7 - 1/scale_factor_8)
 
         #nvtx.range_push("softmax")
         attention_probs = self.softmax_fixed_point.softmax(attention_scores)
@@ -381,11 +382,11 @@ class BertSelfAttention(nn.Module):
             attention_probs = attention_probs * head_mask
 
         # Fixed-point 8.8 format
-        attention_probs = torch.round(attention_probs * (2**8)) / (2**8)
-        attention_probs = torch.clip(attention_probs, -2**7, 127.99609375)
+        attention_probs = torch.floor(attention_probs * scale_factor_8)/scale_factor_8
+        attention_probs = torch.clip(attention_probs, -2**7, 2**7 - 1/scale_factor_8)
         # Fixed-point 8.8 format
-        value_layer = torch.round(value_layer * (2**8)) / (2**8)
-        value_layer = torch.clip(value_layer, -2**7, 127.99609375)
+        value_layer = torch.floor(value_layer * scale_factor_8)/scale_factor_8
+        value_layer = torch.clip(value_layer, -2**7, 2**7 - 1/scale_factor_8)
         
         
         #nvtx.range_push("attention probs * value")
@@ -393,8 +394,8 @@ class BertSelfAttention(nn.Module):
         #nvtx.range_pop()
 
         # Fixed-point 8.8 format
-        context_layer = torch.round(context_layer * (2**8)) / (2**8)
-        context_layer = torch.clip(context_layer, -2**7, 127.99609375)
+        context_layer = torch.floor(context_layer * scale_factor_8)/scale_factor_8
+        context_layer = torch.clip(context_layer, -2**7, 2**7 - 1/scale_factor_8)
         
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
@@ -487,15 +488,16 @@ class BertIntermediate(nn.Module):##feed forward block
             self.intermediate_act_fn =config.hidden_act
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        scale_factor_8 = 2**8
         # Fixed-point 8.8 format
-        # hidden_states 
-        hidden_states = torch.round(hidden_states * (2**8)) / (2**8)
-        hidden_states = torch.clip(hidden_states, -2**7, 127.99609375)
+        # hidden_states
+        hidden_states = torch.floor(hidden_states * scale_factor_8)/scale_factor_8
+        hidden_states = torch.clip(hidden_states, -2**7, 2**7 - 1/scale_factor_8)
         # # weight와 bias 
-        self.dense.weight.data = torch.round(self.dense.weight.data * (2**8)) / (2**8)
-        self.dense.weight.data = torch.clip(self.dense.weight.data, -2**7, 127.99609375)
-        self.dense.bias.data = torch.round(self.dense.bias.data * (2**8)) / (2**8)
-        self.dense.bias.data = torch.clip(self.dense.bias.data, -2**7, 127.99609375)
+        self.dense.weight.data = torch.floor(self.dense.weight.data * scale_factor_8)/scale_factor_8
+        self.dense.weight.data = torch.clip(self.dense.weight.data, -2**7, 2**7 - 1/scale_factor_8)
+        self.dense.bias.data = torch.floor(self.dense.bias.data * scale_factor_8)/scale_factor_8
+        self.dense.bias.data = torch.clip(self.dense.bias.data, -2**7, 2**7 - 1/scale_factor_8)
         # ##
 
         #nvtx.range_push("Fc1")
@@ -504,8 +506,8 @@ class BertIntermediate(nn.Module):##feed forward block
         #torch.save(hidden_states,'/home/user/HJH/transformer/src/bert-base-cased/mrpc/FFN_input.pt') ##++++++ FFN input
         
         # Fixed-point 8.8 format
-        hidden_states = torch.round(hidden_states * (2**8))/(2**8)
-        hidden_states = torch.clip(hidden_states, -2**7, 127.99609375)
+        hidden_states = torch.floor(hidden_states * scale_factor_8)/scale_factor_8
+        hidden_states = torch.clip(hidden_states, -2**7, 2**7 - 1/scale_factor_8)
 
         #nvtx.range_push("activation")
         hidden_states = self.intermediate_act_fn(hidden_states)
@@ -523,15 +525,16 @@ class BertOutput(nn.Module):## add+layernorm after FFN
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+        scale_factor_8 = 2**8
         # Fixed-point 8.8 format
-        # hidden_states 
-        hidden_states = torch.round(hidden_states * (2**8)) / (2**8)
-        hidden_states = torch.clip(hidden_states, -2**7, 127.99609375)
+        # hidden_states
+        hidden_states = torch.floor(hidden_states * scale_factor_8)/scale_factor_8
+        hidden_states = torch.clip(hidden_states, -2**7, 2**7 - 1/scale_factor_8)
         # # weight와 bias 
-        self.dense.weight.data = torch.round(self.dense.weight.data * (2**8)) / (2**8)
-        self.dense.weight.data = torch.clip(self.dense.weight.data, -2**7, 127.99609375)
-        self.dense.bias.data = torch.round(self.dense.bias.data * (2**8)) / (2**8)
-        self.dense.bias.data = torch.clip(self.dense.bias.data, -2**7, 127.99609375)
+        self.dense.weight.data = torch.floor(self.dense.weight.data * scale_factor_8)/scale_factor_8
+        self.dense.weight.data = torch.clip(self.dense.weight.data, -2**7, 2**7 - 1/scale_factor_8)
+        self.dense.bias.data = torch.floor(self.dense.bias.data * scale_factor_8)/scale_factor_8
+        self.dense.bias.data = torch.clip(self.dense.bias.data, -2**7, 2**7 - 1/scale_factor_8)
         # ##
 
 
@@ -541,8 +544,8 @@ class BertOutput(nn.Module):## add+layernorm after FFN
         hidden_states = self.dropout(hidden_states)
 
         # Fixed-point 8.8 format
-        hidden_states = torch.round(hidden_states * (2**8))/(2**8)
-        hidden_states = torch.clip(hidden_states, -2**7, 127.99609375)
+        hidden_states = torch.floor(hidden_states * scale_factor_8)/scale_factor_8
+        hidden_states = torch.clip(hidden_states, -2**7, 2**7 - 1/scale_factor_8)
 
         #FFNout이랑 add결과 출력하기
         #torch.save(hidden_states,'/home/user/HJH/transformer/src/bert-clippedSM/10_FFNout(original).pt') 

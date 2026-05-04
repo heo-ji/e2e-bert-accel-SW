@@ -217,7 +217,7 @@ _shape_t = Union[int, List[int], Size]
 
 #         #input = 8.8
 #         input_fx16 = torch.floor(input * scale_factor_8)/scale_factor_8 #소수부8
-#         input_fx16 = torch.clip(input_fx16, -2**7, 127.99609375) #정수부8.8
+#         input_fx16 = torch.clip(input_fx16, -2**7, 2**7 - 1/scale_factor_8) #정수부8.8
 #         #torch.save(input_fx16,'/home/user/HJH/transformers/src/MPWnormfile/input_8_8.pt') ##저장
 
 #         acc_sum = torch.sum(input_fx16, dim=-1, keepdim=True)
@@ -232,7 +232,7 @@ _shape_t = Union[int, List[int], Size]
 #         mean = mean *0.33203125 #18.8*0.8 = 18.16
 
 #         #mean = 16bit(8.8)로 만들기
-#         mean = torch.clip(mean, -2**7, 127.99609375) #정수부8.8
+#         mean = torch.clip(mean, -2**7, 2**7 - 1/scale_factor_8) #정수부8.8
 #         mean = torch.floor(mean * scale_factor_8)/scale_factor_8 #소수부8
 #         #torch.save(mean,'/home/user/HJH/transformers/src/MPWnormfile/mean_8_8.pt') ##저장
 
@@ -259,7 +259,7 @@ _shape_t = Union[int, List[int], Size]
 
 #         #mean_x2 = 32bit(16.16)   
 #         mean_x2 = torch.floor(mean_x2 * scale_factor_16)/scale_factor_16 #소수부16
-#         mean_x2 = torch.clip(mean_x2, -2**15, 32767.99998474121) #정수부16.16    
+#         mean_x2 = torch.clip(mean_x2, -2**15, 2**15 - 1/scale_factor_16) #정수부16.16    
 #         #torch.save(mean_x2,'/home/user/HJH/transformers/src/MPWnormfile/mean_x2_16_16.pt') ##저장 
 
 #         #E(x)^2 = 32bit(16.16)
@@ -268,7 +268,7 @@ _shape_t = Union[int, List[int], Size]
 
 #         ###E(x)^2 = 32bit(16.16)  -> 26bit(16.10)로 만들기 
 #         ###temp = torch.floor(temp * scale_factor_10)/scale_factor_10 #소수부10
-#         temp = torch.clip(temp, -2**15, 32767.99998474121) #정수부16.16
+#         temp = torch.clip(temp, -2**15, 2**15 - 1/scale_factor_16) #정수부16.16
 #         ###var = 26bit(16.10) - 26bit(16.10)
 
 
@@ -276,7 +276,7 @@ _shape_t = Union[int, List[int], Size]
 #         var = mean_x2 - temp
 
 #         var = torch.floor(var * scale_factor_16)/scale_factor_16 #소수부16
-#         var = torch.clip(var, -2**7, 127.99998474121094) #정수부 (8.16)
+#         var = torch.clip(var, -2**7, 2**7 - 1/scale_factor_16) #정수부 (8.16)
 #         #torch.save(var,'/home/user/HJH/transformers/src/MPWnormfile/var_8_16.pt') ##저장 
 
 #         eps = self.eps #(.16)
@@ -289,20 +289,20 @@ _shape_t = Union[int, List[int], Size]
 
 #         #inverse square root = 8.8
 #         invsqrt = torch.floor(invsqrt * scale_factor_8)/scale_factor_8
-#         invsqrt = torch.clip(invsqrt, -2**7, 127.99609375)
+#         invsqrt = torch.clip(invsqrt, -2**7, 2**7 - 1/scale_factor_8)
 #         #torch.save(invsqrt,'/home/user/HJH/transformers/src/MPWnormfile/invsqrt_8_8.pt') ##저장 
 
 #         # 8.8  * 8.8 = 16.16
 #         normalized = (input_fx16 - mean) * invsqrt 
 #         #normalized = 8.8
 #         normalized = torch.floor(normalized * scale_factor_8)/scale_factor_8 #소수부8
-#         normalized = torch.clip(normalized, -2**7, 127.99609375) #정수부8
+#         normalized = torch.clip(normalized, -2**7, 2**7 - 1/scale_factor_8) #정수부8
 #         #torch.save(normalized,'/home/user/HJH/transformers/src/MPWnormfile/normalized_8_8.pt') ##저장    
 
 #         if self.weight is not None:
 #             #self.weight = 8.8
 #             weight = torch.floor(self.weight * scale_factor_8)/scale_factor_8 #소수부8
-#             weight = torch.clip(weight, -2**7, 127.99609375) #정수부8
+#             weight = torch.clip(weight, -2**7, 2**7 - 1/scale_factor_8) #정수부8
 
 #             #torch.save(weight,'/home/user/HJH/transformers/src/MPWnormfile/weight_8_8.pt') ##저장  
 #             out = normalized * weight
@@ -310,21 +310,21 @@ _shape_t = Union[int, List[int], Size]
 #         else : out = normalized
 #         #8.8
 #         out = torch.floor(out * scale_factor_8)/scale_factor_8 #소수부8
-#         out = torch.clip(out, -2**7, 127.99609375) #정수부8
+#         out = torch.clip(out, -2**7, 2**7 - 1/scale_factor_8) #정수부8
 #         #torch.save(out,'/home/user/HJH/transformers/src/MPWnormfile/weightedout_8_8.pt') ##저장 
 
 
 #         if self.bias is not None:
 #             #self.bias = 8.8
 #             bias = torch.floor(self.bias * scale_factor_8)/scale_factor_8 #소수부8
-#             bias = torch.clip(bias, -2**7, 127.99609375) #정수부8
+#             bias = torch.clip(bias, -2**7, 2**7 - 1/scale_factor_8) #정수부8
 
 #             #torch.save(bias,'/home/user/HJH/transformers/src/MPWnormfile/bias_8_8.pt') ##저장  
 #             out = out + bias
 
 #         #8.8
 #         out = torch.floor(out * scale_factor_8)/scale_factor_8 #소수부8
-#         out = torch.clip(out, -2**7, 127.99609375) #정수부8
+#         out = torch.clip(out, -2**7, 2**7 - 1/scale_factor_8) #정수부8
 
 #         #torch.save(out,'/home/user/HJH/transformers/src/MPWnormfile/biasedout_8_8.pt') ##저장 
 #         #(8.8)
@@ -405,22 +405,22 @@ class Custom_LayerNorm(Module):
 
         #input = 8.8
         input_fx16 = torch.floor(input * scale_factor_8)/scale_factor_8 #소수부8
-        input_fx16 = torch.clip(input_fx16, -2**7, 127.99609375) #정수부8.8
+        input_fx16 = torch.clip(input_fx16, -2**7, 2**7 - 1/scale_factor_8) #정수부8.8
         #torch.save(input_fx16,'/home/user/HJH/transformers/src/MPWnormfile/input_8_8.pt') ##저장
 
         acc_sum = torch.sum(input_fx16, dim=-1, keepdim=True)
         #acc_sum = 26bit(18.8)
-        acc_sum = torch.floor(acc_sum * scale_factor_8)/scale_factor_8 #??필요한가? #소수부8
-        acc_sum = torch.clip(acc_sum, -2**17, 2**17- 1)#??필요한가? 정수부18
+        acc_sum = torch.floor(acc_sum * scale_factor_8)/scale_factor_8 ##소수부8
+        acc_sum = torch.clip(acc_sum, -2**17, 2**17- 1/scale_factor_8)#정수부18 .소수부8
         #torch.save(acc_sum,'/home/user/HJH/transformers/src/MPWnormfile/acc_sum_18_8.pt') ##저장
 
         #mean계산
-        mean = acc_sum /2**8 #/dmodel
-        mean = torch.floor(mean * scale_factor_8)/scale_factor_8 #소수부8
+        mean = acc_sum /2**8 #/dmodel (나누고)
+        mean = torch.floor(mean * scale_factor_8)/scale_factor_8 #소수부8로 precision 맞춤
         mean = mean *0.33203125 #18.8*0.8 = 18.16
 
-        #mean = 16bit(8.8)로 만들기
-        mean = torch.clip(mean, -2**7, 127.99609375) #정수부8.8
+        #mean = 16bit(8.8)로 만들기 = saturation
+        mean = torch.clip(mean, -2**7, 2**7 - 1/scale_factor_8) #정수부8.8
         mean = torch.floor(mean * scale_factor_8)/scale_factor_8 #소수부8
         #torch.save(mean,'/home/user/HJH/transformers/src/MPWnormfile/mean_8_8.pt') ##저장
 
@@ -428,12 +428,14 @@ class Custom_LayerNorm(Module):
         #X^2 = 32bit(16.16) (8.8의 제곱)
         x2 = input_fx16*input_fx16
         #X^2 = 24bit(16.8)
-        # x2 = torch.clip(x2, -2**15, 2**15- 1)#??필요한가? 정수부16
-        x2 = torch.floor(x2 * scale_factor_8)/scale_factor_8 #소수부8 #rescaling and round
         
+        x2 = torch.floor(x2 * scale_factor_8)/scale_factor_8 #소수부8 #rescaling and round
+        #[try]#x2 = torch.clip(x2, -2**15, 2**15- 1/scale_factor_8)# 정수부16.8
+
         #acc_sum_x2= 34bit(26.8 )
         acc_sum_x2 = torch.sum(x2, dim=-1, keepdim=True)
         acc_sum_x2 = torch.floor(acc_sum_x2 * scale_factor_8)/scale_factor_8 #소수부8
+        #[try]#acc_sum_x2 = torch.clip(acc_sum_x2, -2**25, 2**25- 1/scale_factor_8)# 정수부26.8
         #torch.save(acc_sum_x2,'/home/user/HJH/transformers/src/MPWnormfile/acc_sum_x2_26_8.pt') ##저장
         
         
@@ -447,24 +449,24 @@ class Custom_LayerNorm(Module):
 
         #mean_x2 = 32bit(16.16)   
         mean_x2 = torch.floor(mean_x2 * scale_factor_16)/scale_factor_16 #소수부16
-        mean_x2 = torch.clip(mean_x2, -2**15, 32767.99998474121) #정수부16.16    
+        mean_x2 = torch.clip(mean_x2, -2**15, 2**15 - 1/scale_factor_16) #정수부16.16    
         #torch.save(mean_x2,'/home/user/HJH/transformers/src/MPWnormfile/mean_x2_16_16.pt') ##저장 
 
         #E(x)^2 = 32bit(16.16)
         temp = mean*mean
         temp = torch.floor(temp * scale_factor_16)/scale_factor_16 #소수부16
-
+        temp = torch.clip(temp, -2**15, 2**15 - 1/scale_factor_16) #정수부16.16
+        
         ###E(x)^2 = 32bit(16.16)  -> 26bit(16.10)로 만들기 
         ###temp = torch.floor(temp * scale_factor_10)/scale_factor_10 #소수부10
-        temp = torch.clip(temp, -2**15, 32767.99998474121) #정수부16.16
         ###var = 26bit(16.10) - 26bit(16.10)
 
 
-        #var = 32bit - 32bit = 32bit(16.16)  -> (8.16)
+        #var = 32bit - 32bit = 32bit(16.16)  -> (8.16)로 saturation
         var = mean_x2 - temp
 
         var = torch.floor(var * scale_factor_16)/scale_factor_16 #소수부16
-        var = torch.clip(var, -2**7, 127.99998474121094) #정수부 (8.16)
+        var = torch.clip(var, -2**7, 2**7 - 1/scale_factor_16) #정수부 (8.16)
         #torch.save(var,'/home/user/HJH/transformers/src/MPWnormfile/var_8_16.pt') ##저장 
 
         eps = self.eps #(.16)
@@ -477,20 +479,20 @@ class Custom_LayerNorm(Module):
 
         #inverse square root = 8.8
         invsqrt = torch.floor(invsqrt * scale_factor_8)/scale_factor_8
-        invsqrt = torch.clip(invsqrt, -2**7, 127.99609375)
+        invsqrt = torch.clip(invsqrt, -2**7, 2**7 - 1/scale_factor_8)
         #torch.save(invsqrt,'/home/user/HJH/transformers/src/MPWnormfile/invsqrt_8_8.pt') ##저장 
 
         # 8.8  * 8.8 = 16.16
         normalized = (input_fx16 - mean) * invsqrt 
         #normalized = 8.8
         normalized = torch.floor(normalized * scale_factor_8)/scale_factor_8 #소수부8
-        normalized = torch.clip(normalized, -2**7, 127.99609375) #정수부8
+        normalized = torch.clip(normalized, -2**7, 2**7 - 1/scale_factor_8) #정수부8
         #torch.save(normalized,'/home/user/HJH/transformers/src/MPWnormfile/normalized_8_8.pt') ##저장    
 
         if self.weight is not None:
             #self.weight = 8.8
             weight = torch.floor(self.weight * scale_factor_8)/scale_factor_8 #소수부8
-            weight = torch.clip(weight, -2**7, 127.99609375) #정수부8
+            weight = torch.clip(weight, -2**7, 2**7 - 1/scale_factor_8) #정수부8
 
             #torch.save(weight,'/home/user/HJH/transformers/src/MPWnormfile/weight_8_8.pt') ##저장  
             out = normalized * weight
@@ -498,21 +500,21 @@ class Custom_LayerNorm(Module):
         else : out = normalized
         #8.8
         out = torch.floor(out * scale_factor_8)/scale_factor_8 #소수부8
-        out = torch.clip(out, -2**7, 127.99609375) #정수부8
+        out = torch.clip(out, -2**7, 2**7 - 1/scale_factor_8) #정수부8
         #torch.save(out,'/home/user/HJH/transformers/src/MPWnormfile/weightedout_8_8.pt') ##저장 
 
 
         if self.bias is not None:
             #self.bias = 8.8
             bias = torch.floor(self.bias * scale_factor_8)/scale_factor_8 #소수부8
-            bias = torch.clip(bias, -2**7, 127.99609375) #정수부8
+            bias = torch.clip(bias, -2**7, 2**7 - 1/scale_factor_8) #정수부8
 
             #torch.save(bias,'/home/user/HJH/transformers/src/MPWnormfile/bias_8_8.pt') ##저장  
             out = out + bias
 
         #8.8
         out = torch.floor(out * scale_factor_8)/scale_factor_8 #소수부8
-        out = torch.clip(out, -2**7, 127.99609375) #정수부8
+        out = torch.clip(out, -2**7, 2**7 - 1/scale_factor_8) #정수부8
 
         #torch.save(out,'/home/user/HJH/transformers/src/MPWnormfile/biasedout_8_8.pt') ##저장 
         #(8.8)
@@ -525,7 +527,7 @@ class Custom_LayerNorm(Module):
 
         # #input = 8.8
         # input = torch.floor(input * scale_factor_8)/scale_factor_8 #소수부8
-        # input = torch.clip(input, -2**7, 127.99609375) #정수부8.8
+        # input = torch.clip(input, -2**7, 2**7 - 1/scale_factor_8) #정수부8.8
         # #torch.save(input,'/home/user/HJH/transformers/src/MPWnormfile/input_8_8.pt') ##저장
 
         # Algorithm implementation
@@ -567,13 +569,13 @@ class Custom_LayerNorm(Module):
         
         # #normalized = 8.8
         # normalized = torch.floor(normalized * scale_factor_8)/scale_factor_8 #소수부8
-        # normalized = torch.clip(normalized, -2**7, 127.99609375) #정수부8
+        # normalized = torch.clip(normalized, -2**7, 2**7 - 1/scale_factor_8) #정수부8
         # #torch.save(normalized,'/home/user/HJH/transformers/src/MPWnormfile/normalized_8_8.pt') ##저장    
 
         if self.weight is not None:
             # #self.weight = 8.8
             # weight = torch.floor(self.weight * scale_factor_8)/scale_factor_8 #소수부8
-            # weight = torch.clip(weight, -2**7, 127.99609375) #정수부8
+            # weight = torch.clip(weight, -2**7, 2**7 - 1/scale_factor_8) #정수부8
 
             #torch.save(weight,'/home/user/HJH/transformers/src/MPWnormfile/weight_8_8.pt') ##저장  
             out = normalized * self.weight
@@ -581,21 +583,21 @@ class Custom_LayerNorm(Module):
         
         #8.8
         # out = torch.floor(out * scale_factor_8)/scale_factor_8 #소수부8
-        # out = torch.clip(out, -2**7, 127.99609375) #정수부8
+        # out = torch.clip(out, -2**7, 2**7 - 1/scale_factor_8) #정수부8
         #torch.save(out,'/home/user/HJH/transformers/src/MPWnormfile/weightedout_8_8.pt') ##저장 
 
 
         if self.bias is not None:
             # #self.bias = 8.8
             # bias = torch.floor(self.bias * scale_factor_8)/scale_factor_8 #소수부8
-            # bias = torch.clip(bias, -2**7, 127.99609375) #정수부8
+            # bias = torch.clip(bias, -2**7, 2**7 - 1/scale_factor_8) #정수부8
 
             #torch.save(bias,'/home/user/HJH/transformers/src/MPWnormfile/bias_8_8.pt') ##저장  
             out = out + self.bias
 
         # #8.8
         # out = torch.floor(out * scale_factor_8)/scale_factor_8 #소수부8
-        # out = torch.clip(out, -2**7, 127.99609375) #정수부8
+        # out = torch.clip(out, -2**7, 2**7 - 1/scale_factor_8) #정수부8
 
         # torch.save(out,'/home/user/HJH/transformers/src/MPWnormfile/biasedout_8_8.pt') ##저장 
         # (8.8)
