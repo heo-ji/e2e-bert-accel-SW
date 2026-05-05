@@ -415,9 +415,9 @@ class Custom_LayerNorm(Module):
         #torch.save(acc_sum,'/home/user/HJH/transformers/src/MPWnormfile/acc_sum_18_8.pt') ##저장
 
         #mean계산
-        mean = acc_sum /2**8 #/dmodel (나누고)
+        mean = acc_sum /2**8 #Q(18.8) -> Q(10.8)
         mean = torch.floor(mean * scale_factor_8)/scale_factor_8 #소수부8로 precision 맞춤
-        mean = mean *0.33203125 #18.8*0.8 = 18.16
+        mean = mean *0.33203125 #Q(10.8)*0.8 = 10.16
 
         #mean = 16bit(8.8)로 만들기 = saturation
         mean = torch.clip(mean, -2**7, 2**7 - 1/scale_factor_8) #정수부8.8
@@ -440,7 +440,7 @@ class Custom_LayerNorm(Module):
         
         
         #mean_x2
-        mean_x2 = acc_sum_x2 /2**8 #/dmodel (26.8)>>8 = 16.8
+        mean_x2 = acc_sum_x2 /2**8 #/dmodel (26.8)>>8 = 18.8
         mean_x2 = torch.floor(mean_x2 * scale_factor_8)/scale_factor_8 #소수부8
         mean_x2 = mean_x2 *0.33203125 #18.8*0.8 = 18.16
 
@@ -464,7 +464,6 @@ class Custom_LayerNorm(Module):
 
         #var = 32bit - 32bit = 32bit(16.16)  -> (8.16)로 saturation
         var = mean_x2 - temp
-
         var = torch.floor(var * scale_factor_16)/scale_factor_16 #소수부16
         var = torch.clip(var, -2**7, 2**7 - 1/scale_factor_16) #정수부 (8.16)
         #torch.save(var,'/home/user/HJH/transformers/src/MPWnormfile/var_8_16.pt') ##저장 
