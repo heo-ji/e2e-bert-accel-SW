@@ -89,6 +89,23 @@ transformers
 
 
 
+# ./layernorm_sw_golden
+> HW와 비교할 SW_reference trace 파일(txt) 생성을 위한 프로젝트
+
+1. **fxp_fp_sw_golden.py**
+   - `def qformat_value`: clipping & floor 수행
+   - `def sw_float_golden`: 부동소수점 기준 골든 모델
+   - `def sw_qformat_golden`: `custom_norm.py`의 `forward_fxp88`과 동일 로직
+   - **Return:** 
+     ```python
+     return dict(acc=acc, acc2=acc2, mean=mean, mean2=mean2,
+                 var=var, invsqrt=invsqrt, normalized=normalized)
+     ```
+
+2. **invsqrt_LUT_fp_vs_fxp_compare.py**
+   - Inverse square root(var)의 LUT 결과가 0이 되지 않는 `var` 범위 분석
+
+
 
 # 최종 sw 수정
 1. magic num 수정

@@ -1,0 +1,19 @@
+name: Sync README to Specific Notion Block
+on:
+  push:
+    branches: [ main ]
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      - run: pip install notion-client
+      - name: Run sync
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_BLOCK_ID: ${{ secrets.NOTION_BLOCK_ID }}
+        run: python sync_readme.py
