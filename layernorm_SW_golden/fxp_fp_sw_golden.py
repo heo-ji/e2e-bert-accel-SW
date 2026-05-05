@@ -81,11 +81,11 @@ class LUT_InvSqrt:
         
         
         
-        ## s*x = mul값을 (8.8)*(8.16)=>(16.24) 에서 8.8format 으로 정수부 saturation!!
+        ## s*x = mul값을 (8.8)*(8.16)=>(16.24) 에서 8.8format 으로 정수부 saturation(overflow/underflow)!!
         
         s_mul_x = qformat_value(self.s[idx] * x, 8, 8)
 
-        result  = qformat_value(s_mul_x + self.t[idx], 8, 8)
+        result  = qformat_value(s_mul_x + self.t[idx], 8, 8) ##clipping overflow 처리!!
         return result
 
 # =========================================================
@@ -138,14 +138,14 @@ def sw_qformat_golden(values, lut: LUT_InvSqrt):
     mean = qfloor(mean, 8)
     mean = mean * 0.33203125    #Q(10.8)*Q(0.8) = Q(10.16)
 
-    mean = qformat_value(mean, 8, 8) # Q(10.16)-> 8.8 로 정수부saturation!!
+    mean = qformat_value(mean, 8, 8) # Q(10.16)-> 8.8 로 정수부saturation(overflow/underflow)!!
 
     # --- mean2 : 16.16
     mean2 = acc2 / (2 ** 8)            ##나눗셈연산 : 26.8->18.8 format 됨
     mean2 = qfloor(mean2, 8)
     mean2 = mean2 * 0.33203125      ##Q(18.8)*Q(0.8) = Q(18.16)
 
-    mean2 = qformat_value(mean2, 16, 16)   # Q(18.16)-> Q(16.16) 로 정수부saturation!!
+    mean2 = qformat_value(mean2, 16, 16)   # Q(18.16)-> Q(16.16) 로 정수부saturation(overflow/underflow)!!
 
     
     # --- E(x)^2 = 32bit(16.16)
@@ -154,7 +154,7 @@ def sw_qformat_golden(values, lut: LUT_InvSqrt):
 
     # --- var : 8.16
     var = mean2 - mean_sq   
-    var = qformat_value(var, 8, 16) # Q(16.16)->Q(8.16)로 정수부saturation!!
+    var = qformat_value(var, 8, 16) # Q(16.16)->Q(8.16)로 정수부saturation(overflow/underflow)!!
 
     # --- eps (0.16)
     eps = 0.0000152587890625        # 1/2^16
@@ -166,7 +166,7 @@ def sw_qformat_golden(values, lut: LUT_InvSqrt):
 
     # --- norm 8.8
     normalized = [(v - mean) * invsqrt for v in vals] # 8.8  * 8.8 = 16.16
-    normalized = [qformat_value(norm, 8, 8) for norm in normalized] # Q(16.16)->Q(8.8)로 정수부saturation!!
+    normalized = [qformat_value(norm, 8, 8) for norm in normalized] # Q(16.16)->Q(8.8)로 정수부saturation(overflow/underflow)!!
 
 
     return dict(acc=acc, acc2=acc2, mean=mean, mean2=mean2,
