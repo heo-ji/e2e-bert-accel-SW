@@ -17,7 +17,7 @@ def sync():
         notion.blocks.delete(block_id=block["id"])
 
     # 3. README 내용을 2000자 단위로 쪼개기 (노션 API 글자수 제한)
-    chunks = [readme_text[i:i+2000] for i in range(0, len(readme_text), 2000)]
+    chunks = [readme_text[i:i+1900] for i in range(0, len(readme_text), 1900)]
     
     new_blocks = [
         {
