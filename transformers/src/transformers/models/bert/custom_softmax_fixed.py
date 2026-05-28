@@ -42,7 +42,7 @@ class SoftmaxFixedPoint:
         max_input = torch.max(input)
         input = input - max_input
         
-        out = torch.zeros(x.shape).to('cuda')
+        out = torch.zeros(x.shape).to(x.device)
         log2e_x = 2 ** (x.mul(1.4375).round())
         sum_log2e_x = torch.sum(log2e_x, dim=-1, keepdim=True)
         out = log2e_x / sum_log2e_x
