@@ -49,16 +49,42 @@
 <details>
 <summary> BERT SW 모델 </summary>
 <div>
-  data = mrpc 
-  
-1. original : full-precision  
-eval_accuracy           =     0.8775
+<pre><code>
+# 1. 필요하면 설정
+pip install evaluate
+pip uninstall -y peft
+mkdir -p ../../result/result_bert_base_original
 
-2. original with fixed-point 8.8  
-eval_accuracy           =     0.8725
+# 2. SW(FP32) original 정확도 BERT-BASE/GLUE task
+[MNLI] eval_accuracy: 0.8463
+[QNLI] eval_accuracy: 0.9129
+[QQP]  eval_accuracy: 0.9088
+[RTE]  eval_loss: 0.7149
+[SST-2] eval_accuracy: 0.9323
+[STS-B] eval_combined_score: 0.8944
+[CoLA] eval_matthews_correlation: 0.6024
+[MRPC] eval_accuracy: 0.8627
+    
+# 3. SW(FP32) + layernorm만 HW(FXP8.8) 정확도 BERT-BASE/GLUE task
+[MNLI] eval_accuracy: 0.8414
+[QNLI] eval_accuracy: 0.9072
+[QQP]  eval_accuracy: 0.9071
+[RTE]  eval_accuracy: 0.7220
+[SST-2] eval_accuracy: 0.9323
+[STS-B] eval_combined_score: 0.8916
+[CoLA] eval_matthews_correlation: 0.6179
+[MRPC] eval_accuracy: 0.8529
 
-2. custom_GELU , base2softmax , custom_invsqrt_norm  WITH fixed-point 8.8  
-eval_accuracy           =      0.875
+# 4. full HW(FXP8.8) 정확도 BERT-BASE/GLUE task
+[MNLI] eval_accuracy: 0.83739
+[QNLI] eval_accuracy: 0.9081
+[QQP]  eval_accuracy: 0.9074
+[RTE]  eval_accuracy: 0.7220
+[SST-2] eval_accuracy: 0.9300
+[STS-B] eval_combined_score: 0.8916
+[CoLA] eval_matthews_correlation: 0.615343(더 좋아져)
+[MRPC] eval_accuracy: 0.8725(더 좋아져)
+  </code></pre>
 
 </div>
 </details>
