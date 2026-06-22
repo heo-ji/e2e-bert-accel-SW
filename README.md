@@ -84,6 +84,8 @@ mkdir -p ../../result/result_bert_base_original
 [STS-B] eval_combined_score: 0.8916
 [CoLA] eval_matthews_correlation: 0.615343(더 좋아져)
 [MRPC] eval_accuracy: 0.8725(더 좋아져)
+
+더 좋아지는 이유는 outlier 삭제되어서?
   </code></pre>
 
 </div>
